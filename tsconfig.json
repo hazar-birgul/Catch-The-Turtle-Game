@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    /* Language and module system - aligned with what Vite emits and consumes. */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    /* Vite's native config loader requires explicit extensions in vite.config.ts. */
+    "allowImportingTsExtensions": true,
+    "useDefineForClassFields": true,
+
+    /* Vite owns the build; tsc is used purely as a type checker. */
+    "noEmit": true,
+
+    /* Correctness. */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Phaser ships a very large generated .d.ts; checking it wastes time and
+       reports nothing actionable for this project. */
+    "skipLibCheck": true,
+
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+*.local
+
+# Vite / tooling caches
+.vite/
+node_modules/.vite/
+*.tsbuildinfo
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python (the preserved legacy implementation)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# NOTE: the patterns above (.idea/, __pycache__/) intentionally do NOT untrack the
+# copies preserved under legacy/python/. Those files are already tracked, and git
+# never ignores a tracked file - they remain part of the historical record.

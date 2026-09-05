@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+package-lock.json
+
+# The original Python implementation is preserved exactly as it was written and
+# must not be reformatted.
+legacy
