@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { GAME_WIDTH } from '../config/dimensions';
+import { FEEL } from '../config/feel';
 import { TURTLE_TYPES_BY_ID } from '../config/turtleTypes';
 import type { RoundResult } from '../systems/scoring';
 import { getStorageService } from '../services/StorageService';
@@ -105,17 +106,40 @@ export class GameOverScene extends Phaser.Scene {
       color: TEXT.accent,
     }).setOrigin(0.5);
 
-    createText(
+    const bestLine = createText(
       this,
       centerX,
       212,
       isNewBest ? 'NEW BEST' : `BEST  ${highScore.toLocaleString('en-US')}`,
       {
-        fontSize: 13,
+        fontSize: isNewBest ? 16 : 13,
         color: isNewBest ? TEXT.amber : TEXT.muted,
         letterSpacing: 4,
       },
     ).setOrigin(0.5);
+
+    if (!isNewBest) {
+      return;
+    }
+
+    bestLine.setScale(FEEL.newBest.fromScale);
+
+    this.tweens.add({
+      targets: bestLine,
+      scale: 1,
+      duration: FEEL.newBest.introMs,
+      ease: 'Back.easeOut',
+    });
+
+    this.tweens.add({
+      targets: bestLine,
+      alpha: 0.55,
+      delay: FEEL.newBest.introMs,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /**

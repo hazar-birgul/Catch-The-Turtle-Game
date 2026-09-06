@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 
 import { BALANCE } from '../config/balance';
 import { GAME_HEIGHT, GAME_WIDTH } from '../config/dimensions';
+import { countdownCueAt, FEEL } from '../config/feel';
 import { TURTLE_TYPES } from '../config/turtleTypes';
 import { ensureTurtleTextures, Turtle, turtleRadiusAt } from '../entities/Turtle';
 import { difficultyAt, type DifficultyParams } from '../systems/difficulty';
@@ -26,8 +27,10 @@ import {
   type PlayArea,
   type Rect,
 } from '../systems/spawn';
+import { getAudioService } from '../services/AudioService';
+import { Effects } from '../ui/Effects';
 import { Hud } from '../ui/Hud';
-import { FILL } from '../ui/theme';
+import { FILL, TEXT } from '../ui/theme';
 import { applyLogicalViewport } from '../ui/viewport';
 import { createSeededRandom } from '../utils/phaserRandom';
 import type { GameOverPayload } from './GameOverScene';
@@ -84,6 +87,13 @@ export class GameScene extends Phaser.Scene {
 
   private hud!: Hud;
 
+  private effects!: Effects;
+
+  private readonly audio = getAudioService();
+
+  /** Guards against replaying a countdown cue when the HUD refreshes mid-second. */
+  private cuedSecond = -1;
+
   /** Cached so the HUD is only redrawn when the displayed second changes. */
   private displayedSeconds = -1;
 
@@ -103,6 +113,7 @@ export class GameScene extends Phaser.Scene {
     this.turtles = [];
     this.spawnTimer = null;
     this.displayedSeconds = -1;
+    this.cuedSecond = -1;
     this.random = createSeededRandom().random;
     this.exclusionZones = buildExclusionZones(PLAY_AREA);
   }
@@ -114,8 +125,15 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(FILL.background);
 
-    this.hud = new Hud(this, () => {
-      this.pauseRound();
+    this.effects = new Effects(this);
+    this.audio.attach(this.sound);
+
+    this.hud = new Hud(this, {
+      onPause: () => {
+        this.pauseRound();
+      },
+      onToggleMute: () => this.audio.toggleMute(),
+      initiallyMuted: this.audio.isMuted(),
     });
     this.refreshHud();
 
@@ -142,10 +160,35 @@ export class GameScene extends Phaser.Scene {
     if (remainingSeconds !== this.displayedSeconds) {
       this.displayedSeconds = remainingSeconds;
       this.refreshHud();
+      this.cueCountdown(remainingSeconds);
     }
 
     if (this.elapsedMs >= duration) {
       this.endRound();
+    }
+  }
+
+  /**
+   * One tick per second of the closing countdown, keyed off the round clock so
+   * it cannot double-fire when the HUD refreshes for a catch in the same second.
+   */
+  private cueCountdown(remainingSeconds: number): void {
+    if (remainingSeconds === this.cuedSecond) {
+      return;
+    }
+
+    this.cuedSecond = remainingSeconds;
+
+    const cue = countdownCueAt(remainingSeconds);
+
+    if (cue === null) {
+      return;
+    }
+
+    this.audio.play(cue === 'final' ? 'tick-final' : 'tick');
+
+    if (cue === 'final') {
+      this.hud.pulseTime();
     }
   }
 
@@ -223,7 +266,7 @@ export class GameScene extends Phaser.Scene {
    * never both" structural. No turtle registers a `pointerdown` of its own.
    */
   private readonly handlePointerDown = (
-    _pointer: Phaser.Input.Pointer,
+    pointer: Phaser.Input.Pointer,
     currentlyOver: Phaser.GameObjects.GameObject[],
   ): void => {
     if (this.status !== 'running') {
@@ -244,7 +287,13 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.state = registerMiss(this.state);
+    const previous = this.state;
+
+    this.state = registerMiss(previous);
+
+    this.effects.missMarker(pointer.worldX, pointer.worldY);
+    this.audio.play('miss');
+    this.announceComboBreak(previous.combo);
     this.refreshHud();
   };
 
@@ -253,9 +302,56 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.removeTurtle(turtle);
-    this.state = registerHit(this.state, turtle.definition);
+    // Detached before scoring so the target stops counting toward concurrency
+    // and placement the instant it is caught, exactly as it did before the catch
+    // animation existed. The turtle destroys itself when the animation ends.
+    this.detachTurtle(turtle);
+
+    const previous = this.state;
+
+    this.state = registerHit(previous, turtle.definition);
+
+    // The figure shown is the difference the scoring system actually applied,
+    // never a separately computed one.
+    const awarded = this.state.score - previous.score;
+    const isGolden = turtle.definition.id === 'golden';
+
+    this.effects.floatingScore(turtle.x, turtle.y, awarded, isGolden);
+    this.effects.catchBurst(turtle.x, turtle.y, turtle.definition);
+    this.audio.play(isGolden ? 'catch-golden' : 'catch');
+
+    this.announceComboTier(previous.combo, this.state.combo);
     this.refreshHud();
+
+    turtle.playCatch();
+  }
+
+  /** Louder feedback only when the multiplier tier actually steps up. */
+  private announceComboTier(previousCombo: number, currentCombo: number): void {
+    const previousMultiplier = comboMultiplier(previousCombo);
+    const currentMultiplier = comboMultiplier(currentCombo);
+
+    if (currentMultiplier <= previousMultiplier) {
+      return;
+    }
+
+    this.hud.punchCombo();
+    this.effects.banner(
+      `COMBO x${String(currentMultiplier)}`,
+      TEXT.amber,
+      GAME_HEIGHT / 2 - 60,
+      FEEL.combo.bannerMs,
+    );
+    this.audio.play('combo');
+  }
+
+  /** A streak worth noticing has ended. Scoring is untouched by this. */
+  private announceComboBreak(previousCombo: number): void {
+    if (comboMultiplier(previousCombo) < FEEL.combo.breakAnnounceMultiplier) {
+      return;
+    }
+
+    this.effects.banner('COMBO LOST', TEXT.muted, GAME_HEIGHT / 2 - 60, FEEL.combo.breakMs);
   }
 
   /** Arrow property: handed to the turtle as a callback, so it must keep `this`. */
@@ -264,19 +360,28 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.removeTurtle(turtle);
-    this.state = registerEscape(this.state);
+    this.detachTurtle(turtle);
+
+    const previous = this.state;
+
+    this.state = registerEscape(previous);
+
+    this.announceComboBreak(previous.combo);
     this.refreshHud();
+
+    turtle.playEscape();
   };
 
-  private removeTurtle(turtle: Turtle): void {
+  /**
+   * Stop tracking a target without destroying it, so its resolve animation can
+   * play out while the round behaves as though it is already gone.
+   */
+  private detachTurtle(turtle: Turtle): void {
     const index = this.turtles.indexOf(turtle);
 
     if (index !== -1) {
       this.turtles.splice(index, 1);
     }
-
-    turtle.destroy();
   }
 
   /* ---------------------------------------------------------------- *
@@ -312,10 +417,17 @@ export class GameScene extends Phaser.Scene {
     this.clearTurtles();
     this.refreshHud();
 
+    this.audio.play('round-over');
+    this.effects.banner("TIME'S UP", TEXT.primary, GAME_HEIGHT / 2, FEEL.roundEnd.holdMs);
+
     const payload: GameOverPayload = { result: summarizeRound(this.state) };
 
-    this.status = 'ended';
-    this.scene.start(GAME_OVER_SCENE_KEY, payload);
+    // A brief beat before the summary so the round has an ending rather than a
+    // cut. Short by design: replay has to stay immediate.
+    this.time.delayedCall(FEEL.roundEnd.holdMs, () => {
+      this.status = 'ended';
+      this.scene.start(GAME_OVER_SCENE_KEY, payload);
+    });
   }
 
   private stopSpawning(): void {

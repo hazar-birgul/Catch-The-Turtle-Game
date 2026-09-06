@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 
 import { BALANCE } from '../config/balance';
 import { GAME_WIDTH } from '../config/dimensions';
+import { FEEL } from '../config/feel';
 import { createText, FILL, TEXT } from './theme';
 
 /**
@@ -12,6 +13,13 @@ import { createText, FILL, TEXT } from './theme';
  * keeps targets out of — one number, not two that can drift apart. The layout
  * must stay inside it rather than claim play space.
  */
+
+/** What the HUD's own controls report back to the round. */
+export interface HudControls {
+  readonly onPause: () => void;
+  readonly onToggleMute: () => boolean;
+  readonly initiallyMuted: boolean;
+}
 
 /** Everything the HUD draws, in the form the scene already has it. */
 export interface HudView {
@@ -42,6 +50,7 @@ const COLUMN_X = {
 } as const;
 
 const PAUSE_BUTTON = { x: 906, y: BAND_HEIGHT / 2, width: 52, height: 40 } as const;
+const MUTE_BUTTON = { x: 838, y: BAND_HEIGHT / 2, width: 60, height: 40 } as const;
 
 /** Below this, the countdown turns amber. Presentation only — see `update`. */
 const URGENT_SECONDS = 10;
@@ -53,7 +62,12 @@ export class Hud {
   private readonly comboValue: Phaser.GameObjects.Text;
   private readonly accuracyValue: Phaser.GameObjects.Text;
 
-  public constructor(scene: Phaser.Scene, onPause: () => void) {
+  private muteLabel!: Phaser.GameObjects.Text;
+
+  private readonly scene: Phaser.Scene;
+
+  public constructor(scene: Phaser.Scene, controls: HudControls) {
+    this.scene = scene;
     scene.add.rectangle(0, 0, GAME_WIDTH, BAND_HEIGHT, FILL.surface).setOrigin(0, 0);
     scene.add.rectangle(0, BAND_HEIGHT - 1, GAME_WIDTH, 1, FILL.border).setOrigin(0, 0);
 
@@ -67,7 +81,41 @@ export class Hud {
     this.comboValue = this.addValue(scene, COLUMN_X.combo, 'x1');
     this.accuracyValue = this.addValue(scene, COLUMN_X.accuracy, '—');
 
-    this.createPauseButton(scene, onPause);
+    this.createPauseButton(scene, controls.onPause);
+    this.createMuteButton(scene, controls);
+  }
+
+  /** Emphasise the multiplier. Called only when the combo tier actually changes. */
+  public punchCombo(): void {
+    this.scene.tweens.killTweensOf(this.comboValue);
+    this.comboValue.setScale(1);
+
+    this.scene.tweens.add({
+      targets: this.comboValue,
+      scale: FEEL.combo.punchScale,
+      duration: FEEL.combo.punchMs / 2,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
+  }
+
+  /** A single beat on the clock, driven by the round's authoritative second. */
+  public pulseTime(): void {
+    this.scene.tweens.killTweensOf(this.timeValue);
+    this.timeValue.setScale(1);
+
+    this.scene.tweens.add({
+      targets: this.timeValue,
+      scale: 1.22,
+      duration: FEEL.countdown.pulseMs / 2,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
+  }
+
+  public setMuted(muted: boolean): void {
+    this.muteLabel.setText(muted ? 'SFX OFF' : 'SFX ON');
+    this.muteLabel.setColor(muted ? TEXT.muted : TEXT.accent);
   }
 
   /** Redraw every read-out. Cheap enough to call once per frame. */
@@ -138,5 +186,31 @@ export class Hud {
       glyph.setColor(TEXT.secondary);
     });
     background.on('pointerdown', onPause);
+  }
+
+  private createMuteButton(scene: Phaser.Scene, controls: HudControls): void {
+    const background = scene.add
+      .rectangle(MUTE_BUTTON.x, MUTE_BUTTON.y, MUTE_BUTTON.width, MUTE_BUTTON.height, 0x000000, 0)
+      .setStrokeStyle(1, FILL.border)
+      .setInteractive({ useHandCursor: true });
+
+    const label = createText(scene, MUTE_BUTTON.x, MUTE_BUTTON.y, 'SFX ON', {
+      fontSize: 10,
+      color: TEXT.accent,
+      letterSpacing: 1,
+    }).setOrigin(0.5);
+
+    background.on('pointerover', () => {
+      background.setStrokeStyle(1, FILL.accent);
+    });
+    background.on('pointerout', () => {
+      background.setStrokeStyle(1, FILL.border);
+    });
+    background.on('pointerdown', () => {
+      this.setMuted(controls.onToggleMute());
+    });
+
+    this.muteLabel = label;
+    this.setMuted(controls.initiallyMuted);
   }
 }

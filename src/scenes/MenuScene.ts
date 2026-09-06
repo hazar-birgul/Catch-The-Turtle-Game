@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { GAME_WIDTH } from '../config/dimensions';
 import { TURTLE_TYPES, TURTLE_TYPES_BY_ID, type TurtleTypeDefinition } from '../config/turtleTypes';
 import { createTurtleImage, ensureTurtleTextures } from '../entities/Turtle';
+import { getAudioService } from '../services/AudioService';
 import { getStorageService } from '../services/StorageService';
 import { createButton } from '../ui/Button';
 import { createText, FILL, TEXT } from '../ui/theme';
@@ -27,6 +28,10 @@ export class MenuScene extends Phaser.Scene {
     ensureTurtleTextures(this, TURTLE_TYPES);
 
     this.cameras.main.setBackgroundColor(FILL.background);
+
+    // Phaser unlocks the audio context on the first input gesture, which is the
+    // Play button; attaching here just re-applies the persisted mute and volume.
+    getAudioService().attach(this.sound);
 
     const centerX = GAME_WIDTH / 2;
 

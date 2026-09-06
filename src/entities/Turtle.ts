@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { BALANCE } from '../config/balance';
+import { FEEL } from '../config/feel';
 import { type TurtleTypeDefinition } from '../config/turtleTypes';
 import { getRenderScale } from '../config/renderScale';
 
@@ -173,6 +174,14 @@ export class Turtle extends Phaser.GameObjects.Image {
   /** A target must resolve exactly once, as either caught or escaped. */
   private resolved = false;
 
+  /** The display scale this target settles at; every tween is relative to it. */
+  private readonly baseScale: number;
+
+  /** Golden only. Killed before any resolve animation so they cannot fight. */
+  private idleTween: Phaser.Tweens.Tween | null = null;
+
+  private halo: Phaser.GameObjects.Arc | null = null;
+
   public constructor(
     scene: Phaser.Scene,
     x: number,
@@ -183,7 +192,7 @@ export class Turtle extends Phaser.GameObjects.Image {
     super(scene, x, y, textureKeyFor(definition));
 
     this.definition = definition;
-    this.setScale(displayScaleFor(scale));
+    this.baseScale = displayScaleFor(scale);
 
     /*
      * The same circle the drawing and the spawn placement use, in un-scaled
@@ -205,6 +214,144 @@ export class Turtle extends Phaser.GameObjects.Image {
     });
 
     scene.add.existing(this);
+
+    if (definition.id === 'golden') {
+      this.addGoldenPresence(scale);
+    }
+
+    this.playSpawn();
+  }
+
+  /**
+   * Grow-in. Presentation only: the target is interactive from the frame it is
+   * created, and its lifetime is already running. The hit area tracks the tween
+   * because it is derived from the display scale, which is the invariant that
+   * keeps the visual and the hitbox from ever disagreeing; the ease reaches
+   * effectively full size within the first fraction of the duration.
+   */
+  private playSpawn(): void {
+    const feel = FEEL.spawn;
+
+    this.setScale(this.baseScale * feel.fromScale);
+    this.setAlpha(feel.fromAlpha);
+
+    this.scene.tweens.add({
+      targets: this,
+      scale: this.baseScale,
+      alpha: 1,
+      duration: feel.durationMs,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        this.startIdleMotion();
+      },
+    });
+  }
+
+  /** A slow breathing pulse, so the bonus target reads as alive. Golden only. */
+  private startIdleMotion(): void {
+    if (this.resolved || this.definition.id !== 'golden' || this.scene === undefined) {
+      return;
+    }
+
+    this.idleTween = this.scene.tweens.add({
+      targets: this,
+      scale: this.baseScale * FEEL.golden.pulseScale,
+      duration: FEEL.golden.pulseMs,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  private addGoldenPresence(logicalScale: number): void {
+    const halo = this.scene.add
+      .circle(this.x, this.y, turtleRadiusAt(logicalScale) * 1.35)
+      .setStrokeStyle(2, this.definition.placeholderColor, FEEL.golden.haloAlpha)
+      .setDepth(-1);
+
+    this.halo = halo;
+
+    this.scene.tweens.add({
+      targets: halo,
+      scale: 1.12,
+      alpha: 0.45,
+      duration: FEEL.golden.pulseMs,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  /**
+   * Catch animation. The round has already been scored by the time this runs;
+   * the target only has to leave the screen convincingly.
+   */
+  public playCatch(): void {
+    this.scene.tweens.killTweensOf(this);
+    this.stopIdleMotion();
+    this.fadeHalo();
+
+    const feel = FEEL.catch;
+
+    this.scene.tweens.add({
+      targets: this,
+      scale: this.baseScale * feel.punchScale,
+      duration: feel.punchMs,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        if (this.scene === undefined) {
+          return;
+        }
+
+        this.scene.tweens.add({
+          targets: this,
+          scale: this.baseScale * feel.collapseScale,
+          alpha: 0,
+          duration: feel.collapseMs,
+          ease: 'Quad.easeIn',
+          onComplete: () => {
+            this.destroy();
+          },
+        });
+      },
+    });
+  }
+
+  /** Escape animation: shrink and dim, deliberately unlike the catch punch. */
+  public playEscape(): void {
+    this.scene.tweens.killTweensOf(this);
+    this.stopIdleMotion();
+    this.fadeHalo();
+
+    const feel = FEEL.escape;
+
+    this.scene.tweens.add({
+      targets: this,
+      scale: this.baseScale * feel.toScale,
+      alpha: feel.dimAlpha,
+      duration: feel.durationMs,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.destroy();
+      },
+    });
+  }
+
+  private stopIdleMotion(): void {
+    this.idleTween?.remove();
+    this.idleTween = null;
+  }
+
+  private fadeHalo(): void {
+    const halo = this.halo;
+
+    if (halo === null) {
+      return;
+    }
+
+    this.halo = null;
+    this.scene?.tweens.killTweensOf(halo);
+    halo.destroy();
   }
 
   /**
@@ -247,6 +394,8 @@ export class Turtle extends Phaser.GameObjects.Image {
 
   public override destroy(fromScene?: boolean): void {
     this.cancelLifetime();
+    this.stopIdleMotion();
+    this.fadeHalo();
     super.destroy(fromScene);
   }
 

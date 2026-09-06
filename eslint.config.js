@@ -14,7 +14,9 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // The preserved Python implementation and build output are never linted.
-    ignores: ['dist/**', 'coverage/**', 'legacy/**'],
+    // Build output, the preserved Python implementation, and the standalone
+    // asset generator, which is a Node script outside the app's tsconfig program.
+    ignores: ['dist/**', 'coverage/**', 'legacy/**', 'tools/**'],
   },
 
   js.configs.recommended,
