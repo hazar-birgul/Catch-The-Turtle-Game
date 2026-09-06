@@ -104,7 +104,7 @@ function sanitizeSettings(value: unknown): PlayerSettings {
  *
  * Field-by-field recovery is deliberate: a partially corrupted object should
  * cost the player only the corrupted field, not their whole high score. A
- * mismatched schema version is the exception — we cannot interpret it, so it
+ * mismatched schema version is the exception — it cannot be interpreted, so it
  * resets to defaults.
  */
 export function sanitizeSaveData(parsed: unknown): SaveData {

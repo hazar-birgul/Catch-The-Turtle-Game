@@ -31,3 +31,5 @@ venv/
 # NOTE: the patterns above (.idea/, __pycache__/) intentionally do NOT untrack the
 # copies preserved under legacy/python/. Those files are already tracked, and git
 # never ignores a tracked file - they remain part of the historical record.
+
+CLAUDE.md

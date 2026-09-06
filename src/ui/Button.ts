@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 
-import { FILL, FONT_STACK, TEXT } from './theme';
+import { BUTTON, createText, FILL, TEXT } from './theme';
 
 /**
  * A rectangle with a label that responds to a pointer press.
  *
- * Four scenes need the same thing, which is enough to justify one helper. It is
- * deliberately a small factory function rather than a Button class hierarchy:
- * there is no per-button behaviour to inherit, only configuration.
+ * A factory rather than a class: there is no per-button behaviour to inherit,
+ * only configuration. `primary` is the filled call to action, one per screen;
+ * `secondary` is a dark surface with a hairline border.
  */
 
 export interface ButtonOptions {
@@ -18,7 +18,6 @@ export interface ButtonOptions {
   readonly width?: number;
   readonly height?: number;
   readonly fontSize?: number;
-  /** `primary` is the filled accent button; `secondary` is outlined. */
   readonly variant?: 'primary' | 'secondary';
 }
 
@@ -33,40 +32,52 @@ export function createButton(scene: Phaser.Scene, options: ButtonOptions): Butto
     y,
     label,
     onPress,
-    width = 220,
-    height = 58,
-    fontSize = 22,
+    width = BUTTON.width,
+    height = BUTTON.height,
+    fontSize = BUTTON.fontSize,
     variant = 'primary',
   } = options;
 
   const isPrimary = variant === 'primary';
-  const idleFill = isPrimary ? FILL.accent : FILL.panel;
-  const hoverFill = isPrimary ? FILL.accentHover : FILL.shell;
+
+  // Hover darkens rather than lightens, so the pressed state has somewhere to go.
+  const idleFill = isPrimary ? FILL.accent : FILL.surface;
+  const hoverFill = isPrimary ? FILL.accentPressed : FILL.surfaceHover;
+  const idleStroke = isPrimary ? FILL.accent : FILL.border;
+  const hoverStroke = isPrimary ? FILL.accentPressed : FILL.accent;
 
   const background = scene.add
     .rectangle(x, y, width, height, idleFill)
-    .setStrokeStyle(2, isPrimary ? FILL.accent : FILL.shell)
+    .setStrokeStyle(BUTTON.borderWidth, idleStroke)
     .setInteractive({ useHandCursor: true });
 
-  const text = scene.add
-    .text(x, y, label, {
-      fontFamily: FONT_STACK,
-      fontSize: `${String(fontSize)}px`,
-      fontStyle: '700',
-      color: isPrimary ? TEXT.onAccent : TEXT.primary,
-    })
-    .setOrigin(0.5);
+  const text = createText(scene, x, y, label, {
+    fontSize,
+    color: isPrimary ? TEXT.onAccent : TEXT.primary,
+    letterSpacing: BUTTON.letterSpacing,
+  }).setOrigin(0.5);
 
-  background.on('pointerover', () => background.setFillStyle(hoverFill));
-  background.on('pointerout', () => background.setFillStyle(idleFill));
+  const setState = (fill: number, stroke: number): void => {
+    background.setFillStyle(fill);
+    background.setStrokeStyle(BUTTON.borderWidth, stroke);
+  };
+
+  background.on('pointerover', () => {
+    setState(hoverFill, hoverStroke);
+  });
+  background.on('pointerout', () => {
+    setState(idleFill, idleStroke);
+  });
 
   // `pointerdown` rather than `pointerup` so the response feels immediate, and
   // because mouse, touch and pen all arrive through the same pointer event.
   background.on('pointerdown', () => {
+    // Label and background tween together so they never separate; 0.97 is shallow
+    // enough that the text does not visibly resample.
     scene.tweens.add({
       targets: [background, text],
-      scale: 0.95,
-      duration: 80,
+      scale: 0.97,
+      duration: 70,
       yoyo: true,
       ease: 'Quad.easeOut',
     });

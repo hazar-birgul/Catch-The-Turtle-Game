@@ -61,8 +61,8 @@ export interface SpawnBalance {
    *
    * One number drives three things that must never disagree: how large the
    * placeholder turtle is drawn, the radius placement keeps clear of edges and
-   * neighbours, and the radius of the interactive hit area. The legacy game kept
-   * these separate and they silently desynchronised (defect 12).
+   * neighbours, and the radius of the interactive hit area. Keeping them as one
+   * number is what stops the sprite and the hitbox silently desynchronising.
    */
   readonly targetBaseRadiusPx: number;
   /**

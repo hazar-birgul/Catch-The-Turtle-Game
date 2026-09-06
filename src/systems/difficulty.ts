@@ -1,12 +1,8 @@
 import { BALANCE, type DifficultyBalance, type RampedValue } from '../config/balance';
 
 /**
- * Progressive difficulty.
- *
- * The legacy game picked one of three fixed speeds at a menu and never changed
- * it. Here difficulty is a pure function of elapsed round time, so it is fully
- * deterministic, trivially testable, and has no state of its own to get out of
- * sync with the round.
+ * Progressive difficulty as a pure function of elapsed round time: deterministic,
+ * directly testable, and with no state of its own to fall out of sync.
  */
 
 export interface DifficultyParams {

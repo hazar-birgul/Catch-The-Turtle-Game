@@ -31,9 +31,9 @@ export interface TurtleTypeDefinition {
    */
   readonly spawnWeight: RampedValue;
   /**
-   * Temporary flat colour used by the placeholder graphics. The art phase
-   * replaces this with real textures; it exists so the two variants are
-   * distinguishable before any artwork exists.
+   * Flat colour for the generated placeholder art, taken from the palette in
+   * `ui/theme.ts`: green is the primary accent, amber the secondary one reserved
+   * for the bonus target.
    */
   readonly placeholderColor: number;
 }
@@ -46,7 +46,7 @@ const NORMAL_TURTLE: TurtleTypeDefinition = {
   lifetimeMultiplier: 1,
   // Stays dominant all round, but yields a little share to the bonus target.
   spawnWeight: { start: 96, end: 90 },
-  placeholderColor: 0x4ade80,
+  placeholderColor: 0x22c55e,
 };
 
 const GOLDEN_TURTLE: TurtleTypeDefinition = {
@@ -61,7 +61,7 @@ const GOLDEN_TURTLE: TurtleTypeDefinition = {
   lifetimeMultiplier: 0.75,
   // ~4% of spawns early, rising to ~10% once the round is fully ramped.
   spawnWeight: { start: 4, end: 10 },
-  placeholderColor: 0xfacc15,
+  placeholderColor: 0xf59e0b,
 };
 
 export const TURTLE_TYPES: readonly TurtleTypeDefinition[] = [NORMAL_TURTLE, GOLDEN_TURTLE];

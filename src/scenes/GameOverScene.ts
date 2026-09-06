@@ -1,19 +1,19 @@
 import Phaser from 'phaser';
 
-import { GAME_HEIGHT, GAME_WIDTH } from '../config/dimensions';
+import { GAME_WIDTH } from '../config/dimensions';
 import { TURTLE_TYPES_BY_ID } from '../config/turtleTypes';
 import type { RoundResult } from '../systems/scoring';
 import { getStorageService } from '../services/StorageService';
 import { createButton } from '../ui/Button';
-import { FILL, FONT_STACK, TEXT } from '../ui/theme';
+import { createText, FILL, TEXT } from '../ui/theme';
+import { applyLogicalViewport } from '../ui/viewport';
 
 /**
  * The end-of-round summary.
  *
- * The result arrives as a typed scene payload rather than through a module-level
- * global — the legacy game kept its state in Python globals and it is exactly
- * what this rebuild exists to avoid. Phaser scene data is explicit, typed at the
- * boundary, and cannot be read by a scene that was never handed it.
+ * The result arrives as a typed scene payload rather than a module-level global,
+ * so it is explicit at the boundary and cannot be read by a scene that was never
+ * handed it.
  */
 
 export interface GameOverPayload {
@@ -22,6 +22,13 @@ export interface GameOverPayload {
 
 const GAME_SCENE_KEY = 'Game';
 const MENU_SCENE_KEY = 'Menu';
+
+/** One headline statistic: label, formatted value, and how to colour it. */
+interface SummaryStat {
+  readonly label: string;
+  readonly value: string;
+  readonly color: string;
+}
 
 export class GameOverScene extends Phaser.Scene {
   public static readonly KEY = 'GameOver';
@@ -47,30 +54,22 @@ export class GameOverScene extends Phaser.Scene {
       return;
     }
 
-    // Submitting here, rather than in GameScene, keeps the round scene free of
-    // persistence concerns — and `StorageService` owns the "is it a new best?"
-    // comparison, so this screen never re-derives it.
+    // Submitting here keeps the round scene free of persistence concerns, and
+    // `StorageService` owns the "is it a new best?" comparison.
     const { highScore, isNewBest } = getStorageService().submitScore(result.score);
+
+    applyLogicalViewport(this);
 
     this.cameras.main.setBackgroundColor(FILL.background);
 
     const centerX = GAME_WIDTH / 2;
 
-    this.add
-      .text(centerX, 52, "TIME'S UP", {
-        fontFamily: FONT_STACK,
-        fontSize: '42px',
-        fontStyle: '700',
-        color: TEXT.primary,
-      })
-      .setOrigin(0.5, 0);
-
     this.createScoreBlock(centerX, result, highScore, isNewBest);
     this.createBreakdown(centerX, result);
 
     createButton(this, {
-      x: centerX - 124,
-      y: GAME_HEIGHT - 66,
+      x: centerX - 128,
+      y: 462,
       label: 'PLAY AGAIN',
       onPress: () => {
         this.scene.start(GAME_SCENE_KEY);
@@ -78,8 +77,8 @@ export class GameOverScene extends Phaser.Scene {
     });
 
     createButton(this, {
-      x: centerX + 124,
-      y: GAME_HEIGHT - 66,
+      x: centerX + 128,
+      y: 462,
       label: 'MAIN MENU',
       variant: 'secondary',
       onPress: () => {
@@ -88,31 +87,35 @@ export class GameOverScene extends Phaser.Scene {
     });
   }
 
+  /** The score carries the size and the accent; the title only names the screen. */
   private createScoreBlock(
     centerX: number,
     result: RoundResult,
     highScore: number,
     isNewBest: boolean,
   ): void {
-    this.add
-      .text(centerX, 112, result.score.toLocaleString('en-US'), {
-        fontFamily: FONT_STACK,
-        fontSize: '78px',
-        fontStyle: '700',
-        color: TEXT.accent,
-      })
-      .setOrigin(0.5, 0);
+    createText(this, centerX, 64, "TIME'S UP", {
+      fontSize: 20,
+      color: TEXT.secondary,
+      letterSpacing: 8,
+    }).setOrigin(0.5);
 
-    const bestLine = isNewBest ? 'NEW BEST!' : `BEST  ${highScore.toLocaleString('en-US')}`;
+    createText(this, centerX, 148, result.score.toLocaleString('en-US'), {
+      fontSize: 92,
+      color: TEXT.accent,
+    }).setOrigin(0.5);
 
-    this.add
-      .text(centerX, 202, bestLine, {
-        fontFamily: FONT_STACK,
-        fontSize: '20px',
-        fontStyle: '700',
-        color: isNewBest ? TEXT.gold : TEXT.muted,
-      })
-      .setOrigin(0.5, 0);
+    createText(
+      this,
+      centerX,
+      212,
+      isNewBest ? 'NEW BEST' : `BEST  ${highScore.toLocaleString('en-US')}`,
+      {
+        fontSize: 13,
+        color: isNewBest ? TEXT.amber : TEXT.muted,
+        letterSpacing: 4,
+      },
+    ).setOrigin(0.5);
   }
 
   /**
@@ -120,52 +123,47 @@ export class GameOverScene extends Phaser.Scene {
    * needs an entry in this list and nothing else.
    */
   private createBreakdown(centerX: number, result: RoundResult): void {
-    const stats: readonly (readonly [string, string])[] = [
-      ['ACCURACY', result.attempts === 0 ? '—' : `${String(Math.round(result.accuracy * 100))}%`],
-      ['MAX COMBO', `x${String(result.maxCombo)}`],
-      ['CAUGHT', String(result.hits)],
-      [
-        `${TURTLE_TYPES_BY_ID.golden.label.toUpperCase()} CAUGHT`,
-        String(result.caughtByType.golden),
-      ],
+    const golden = TURTLE_TYPES_BY_ID.golden;
+
+    const stats: readonly SummaryStat[] = [
+      {
+        label: 'ACCURACY',
+        value: result.attempts === 0 ? '—' : `${String(Math.round(result.accuracy * 100))}%`,
+        color: TEXT.primary,
+      },
+      { label: 'MAX COMBO', value: `x${String(result.maxCombo)}`, color: TEXT.primary },
+      { label: 'CAUGHT', value: String(result.hits), color: TEXT.primary },
+      // Amber here matches the colour the player saw the target in.
+      {
+        label: golden.label.toUpperCase(),
+        value: String(result.caughtByType.golden),
+        color: TEXT.amber,
+      },
     ];
 
-    const spacing = 208;
+    const spacing = 186;
     const startX = centerX - (spacing * (stats.length - 1)) / 2;
 
-    stats.forEach(([label, value], index) => {
+    stats.forEach((stat, index) => {
       const x = startX + spacing * index;
 
-      this.add
-        .text(x, 274, label, {
-          fontFamily: FONT_STACK,
-          fontSize: '12px',
-          fontStyle: '700',
-          color: TEXT.muted,
-        })
-        .setOrigin(0.5, 0);
+      createText(this, x, 290, stat.label, {
+        fontSize: 11,
+        color: TEXT.muted,
+        letterSpacing: 2,
+      }).setOrigin(0.5);
 
-      this.add
-        .text(x, 294, value, {
-          fontFamily: FONT_STACK,
-          fontSize: '30px',
-          fontStyle: '700',
-          color: TEXT.primary,
-        })
-        .setOrigin(0.5, 0);
+      createText(this, x, 322, stat.value, { fontSize: 32, color: stat.color }).setOrigin(0.5);
     });
 
-    this.add
-      .text(
-        centerX,
-        362,
-        `Misses ${String(result.misses)}   ·   Escaped ${String(result.escaped)}   ·   Spawned ${String(result.spawned)}`,
-        {
-          fontFamily: FONT_STACK,
-          fontSize: '15px',
-          color: TEXT.faint,
-        },
-      )
-      .setOrigin(0.5, 0);
+    this.add.rectangle(centerX, 364, 560, 1, FILL.border);
+
+    createText(
+      this,
+      centerX,
+      390,
+      `Misses ${String(result.misses)}   ·   Escaped ${String(result.escaped)}   ·   Spawned ${String(result.spawned)}`,
+      { fontSize: 13, color: TEXT.muted, weight: '600' },
+    ).setOrigin(0.5);
   }
 }

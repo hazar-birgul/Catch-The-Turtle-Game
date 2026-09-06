@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
     <meta
       name="description"
       content="Catch the Turtle - a browser arcade game. Catch as many turtles as you can before time runs out."
@@ -20,14 +21,20 @@
       body {
         height: 100%;
         margin: 0;
+        /* Pure black, one step below the canvas ground (#0a0a0a), so the
+           letterbox bars read as deliberate surround rather than as an unpainted
+           gap. The two are close enough that no edge draws attention to itself. */
+        background: #000000;
         overflow: hidden;
-        background: #0b1613;
       }
 
       body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        /* The safe-area inset lives here, not on #game-root. Phaser measures its
+           parent with getBoundingClientRect(), which includes padding, so padding
+           on the parent would have it size the canvas to a box larger than the
+           one CSS centres it in. */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
         /* Stop mobile browsers scrolling, zooming or rubber-banding when the
            player taps the playfield. */
         overscroll-behavior: none;
@@ -39,25 +46,36 @@
         -webkit-tap-highlight-color: transparent;
       }
 
+      /*
+       * Centring happens here and ONLY here.
+       *
+       * Phaser's Scale Manager is set to `NO_CENTER` (see `gameConfig.ts`) so
+       * that it sizes the canvas and leaves positioning alone. With
+       * `CENTER_BOTH` it also writes `margin-left`/`margin-top` onto the canvas,
+       * and grid — which centres an item by its outer size, margins included —
+       * would then centre an already-offset box and leave it visibly off-centre.
+       *
+       * Grid is the better owner here because it centres inside the content box,
+       * so the safe-area inset on <body> is actually honoured on notched devices.
+       */
       #game-root {
         width: 100%;
         height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        /* Keep the canvas clear of notches and home indicators. */
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-          env(safe-area-inset-left);
+        display: grid;
+        place-items: center;
       }
 
       #game-root canvas {
         display: block;
         touch-action: none;
+        /* The canvas is the only lit surface on the page; nothing frames it. */
+        max-width: 100%;
+        max-height: 100%;
       }
 
       /* Shown only if the module script never runs (no JS, or a failed load). */
       .no-script {
-        color: #7f9d93;
+        color: #a3a3a3;
         font:
           16px/1.6 ui-sans-serif,
           system-ui,

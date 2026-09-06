@@ -10,7 +10,7 @@ import { nextUnitInterval, type RandomSource } from './random';
  * put it (rejection-sampled placement).
  *
  * Neither knows anything about Phaser. Placement receives a plain rectangle and
- * returns a plain `{ x, y }`, so P3 can hand it the logical playfield and get
+ * returns a plain `{ x, y }`, so a caller hands it the logical playfield and gets
  * coordinates back without this module importing the engine.
  */
 
@@ -253,7 +253,7 @@ function isTooClose(
  * Rejection sampling with a hard attempt budget — it can never loop forever.
  *
  * CONTRACT: returns `null` when no valid position was found, rather than a
- * best-effort placement. A "closest we could manage" result would silently put a
+ * best-effort placement. A closest-available result would silently put a
  * turtle under the HUD or on top of another one, which is a gameplay bug that is
  * hard to spot; `null` makes the caller decide, and the obviously correct
  * decision for a spawner is to skip this tick and try again on the next one.

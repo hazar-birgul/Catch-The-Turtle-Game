@@ -2,19 +2,15 @@ import Phaser from 'phaser';
 
 import { BALANCE } from '../config/balance';
 import { GAME_WIDTH } from '../config/dimensions';
-import { FILL, FONT_STACK, TEXT } from './theme';
+import { createText, FILL, TEXT } from './theme';
 
 /**
- * The in-round heads-up display.
+ * The in-round heads-up display. It renders values handed in through `update` and
+ * holds no round state of its own.
  *
- * It renders numbers and nothing else: every value it shows is computed by the
- * pure gameplay systems and handed in through `update`. The HUD holds no round
- * state and applies no rules, which is what keeps `systems/scoring.ts` the single
- * definition of what a combo or an accuracy figure means.
- *
- * The whole thing is laid out inside `BALANCE.spawn.hudSafeTopPx`, which is the
- * same band `buildExclusionZones` keeps targets out of — so the HUD region and
- * the spawn keep-out region are one number, not two that can drift apart.
+ * Its height is `BALANCE.spawn.hudSafeTopPx`, the same band `buildExclusionZones`
+ * keeps targets out of — one number, not two that can drift apart. The layout
+ * must stay inside it rather than claim play space.
  */
 
 /** Everything the HUD draws, in the form the scene already has it. */
@@ -30,8 +26,12 @@ export interface HudView {
 
 const BAND_HEIGHT = BALANCE.spawn.hudSafeTopPx;
 
-const LABEL_Y = 14;
-const VALUE_Y = 32;
+/**
+ * Labels sit on a quiet baseline above their value, so the eye reads down a
+ * column rather than across a row of equally weighted text.
+ */
+const LABEL_Y = 24;
+const VALUE_Y = 50;
 
 /** Left edge of each read-out. Values are left-aligned so they do not jitter. */
 const COLUMN_X = {
@@ -41,7 +41,10 @@ const COLUMN_X = {
   accuracy: 672,
 } as const;
 
-const PAUSE_BUTTON = { x: 908, y: BAND_HEIGHT / 2, width: 56, height: 42 } as const;
+const PAUSE_BUTTON = { x: 906, y: BAND_HEIGHT / 2, width: 52, height: 40 } as const;
+
+/** Below this, the countdown turns amber. Presentation only — see `update`. */
+const URGENT_SECONDS = 10;
 
 export class Hud {
   private readonly scoreValue: Phaser.GameObjects.Text;
@@ -51,15 +54,15 @@ export class Hud {
   private readonly accuracyValue: Phaser.GameObjects.Text;
 
   public constructor(scene: Phaser.Scene, onPause: () => void) {
-    scene.add.rectangle(0, 0, GAME_WIDTH, BAND_HEIGHT, FILL.band, 0.85).setOrigin(0, 0);
-    scene.add.rectangle(0, BAND_HEIGHT, GAME_WIDTH, 2, FILL.shell).setOrigin(0, 0);
+    scene.add.rectangle(0, 0, GAME_WIDTH, BAND_HEIGHT, FILL.surface).setOrigin(0, 0);
+    scene.add.rectangle(0, BAND_HEIGHT - 1, GAME_WIDTH, 1, FILL.border).setOrigin(0, 0);
 
     this.addLabel(scene, COLUMN_X.score, 'SCORE');
     this.addLabel(scene, COLUMN_X.time, 'TIME');
     this.comboLabel = this.addLabel(scene, COLUMN_X.combo, 'COMBO');
     this.addLabel(scene, COLUMN_X.accuracy, 'ACCURACY');
 
-    this.scoreValue = this.addValue(scene, COLUMN_X.score, '0');
+    this.scoreValue = this.addValue(scene, COLUMN_X.score, '0', TEXT.accent);
     this.timeValue = this.addValue(scene, COLUMN_X.time, '0');
     this.comboValue = this.addValue(scene, COLUMN_X.combo, 'x1');
     this.accuracyValue = this.addValue(scene, COLUMN_X.accuracy, '—');
@@ -70,10 +73,13 @@ export class Hud {
   /** Redraw every read-out. Cheap enough to call once per frame. */
   public update(view: HudView): void {
     this.scoreValue.setText(view.score.toLocaleString('en-US'));
+
     this.timeValue.setText(String(view.remainingSeconds));
+    // Presentation only: the round is driven entirely by `GameScene.elapsedMs`.
+    this.timeValue.setColor(view.remainingSeconds <= URGENT_SECONDS ? TEXT.amber : TEXT.primary);
 
     this.comboValue.setText(`x${String(view.multiplier)}`);
-    this.comboValue.setColor(view.multiplier > 1 ? TEXT.gold : TEXT.primary);
+    this.comboValue.setColor(view.multiplier > 1 ? TEXT.amber : TEXT.primary);
     // The streak sits in the label rather than getting a column of its own: it
     // is context for the multiplier, not a headline number.
     this.comboLabel.setText(view.combo > 0 ? `COMBO · ${String(view.combo)}` : 'COMBO');
@@ -84,28 +90,26 @@ export class Hud {
   }
 
   private addLabel(scene: Phaser.Scene, x: number, text: string): Phaser.GameObjects.Text {
-    return scene.add.text(x, LABEL_Y, text, {
-      fontFamily: FONT_STACK,
-      fontSize: '12px',
-      fontStyle: '700',
+    return createText(scene, x, LABEL_Y, text, {
+      fontSize: 11,
       color: TEXT.muted,
-    });
+      letterSpacing: 2,
+    }).setOrigin(0, 0.5);
   }
 
-  private addValue(scene: Phaser.Scene, x: number, text: string): Phaser.GameObjects.Text {
-    return scene.add.text(x, VALUE_Y, text, {
-      fontFamily: FONT_STACK,
-      fontSize: '26px',
-      fontStyle: '700',
-      color: TEXT.primary,
-    });
+  private addValue(
+    scene: Phaser.Scene,
+    x: number,
+    text: string,
+    color: string = TEXT.primary,
+  ): Phaser.GameObjects.Text {
+    return createText(scene, x, VALUE_Y, text, { fontSize: 26, color }).setOrigin(0, 0.5);
   }
 
   /**
-   * A visible pause control, so pausing is reachable on touch where there is no
-   * Escape key. It is the only interactive object in the play area besides the
-   * turtles; `GameScene` treats a press on any non-turtle interactive object as
-   * interface input rather than as a missed swipe.
+   * Pausing has to be reachable on touch, where there is no Escape key. This is
+   * the only interactive object in the play area besides the turtles, which is
+   * what lets `GameScene` treat any non-turtle hit as interface input.
    */
   private createPauseButton(scene: Phaser.Scene, onPause: () => void): void {
     const background = scene.add
@@ -114,21 +118,25 @@ export class Hud {
         PAUSE_BUTTON.y,
         PAUSE_BUTTON.width,
         PAUSE_BUTTON.height,
-        FILL.panel,
+        0x000000,
+        0,
       )
-      .setStrokeStyle(2, FILL.shell)
+      .setStrokeStyle(1, FILL.border)
       .setInteractive({ useHandCursor: true });
 
-    scene.add
-      .text(PAUSE_BUTTON.x, PAUSE_BUTTON.y, '❚❚', {
-        fontFamily: FONT_STACK,
-        fontSize: '16px',
-        color: TEXT.muted,
-      })
-      .setOrigin(0.5);
+    const glyph = createText(scene, PAUSE_BUTTON.x, PAUSE_BUTTON.y, '❚❚', {
+      fontSize: 14,
+      color: TEXT.secondary,
+    }).setOrigin(0.5);
 
-    background.on('pointerover', () => background.setFillStyle(FILL.shell));
-    background.on('pointerout', () => background.setFillStyle(FILL.panel));
+    background.on('pointerover', () => {
+      background.setStrokeStyle(1, FILL.accent);
+      glyph.setColor(TEXT.accent);
+    });
+    background.on('pointerout', () => {
+      background.setStrokeStyle(1, FILL.border);
+      glyph.setColor(TEXT.secondary);
+    });
     background.on('pointerdown', onPause);
   }
 }
