@@ -26,9 +26,16 @@ Runs directly in the browser on desktop and mobile. No installation required.
   turtles caught, plus misses, escapes and total spawns.
 - The high score is kept in browser storage and survives a reload.
 - Rounds can be paused and resumed, replayed, or abandoned back to the menu.
+- Catches have visual and audio feedback; misses and broken combos get lighter cues.
+- Reaching a new combo tier is highlighted, and the Golden turtle has its own stronger
+  visual and audio response.
+- The closing seconds add countdown urgency, and the round ends on a brief hand-off to the
+  summary.
+- Sound can be muted at any time during a round.
 
-Artwork is still placeholder — turtles, buttons and panels are drawn programmatically, and the
-game ships no image or audio files.
+Artwork is still placeholder — turtles, buttons and panels are drawn programmatically, and
+the game ships no image files. Sound effects are generated specifically for this project;
+provenance is documented in [`public/assets/ASSETS.md`](public/assets/ASSETS.md).
 
 ## Controls
 
@@ -36,6 +43,7 @@ game ships no image or audio files.
 | -------------- | --------------------------------- |
 | Mouse or touch | Catch turtles                     |
 | `Esc` or `P`   | Pause and resume                  |
+| `SFX` button   | Toggle sound                      |
 | On-screen      | Play, pause, resume, replay, menu |
 
 ## Tech stack
@@ -72,7 +80,9 @@ The game world is a fixed 960×540 logical space. On high-DPI displays the canva
 at a higher resolution and each scene camera is zoomed to match, so world coordinates,
 gameplay sizes and hit areas stay unchanged while the image stays sharp.
 
-Every tuning value lives in `src/config/balance.ts` rather than being spread through the scenes.
+Every tuning value lives in `src/config/balance.ts` rather than being spread through the
+scenes. Presentation timing and audio behaviour are kept in separate modules, so visual and
+sound feedback cannot affect scoring, spawning or difficulty.
 
 ## Quality
 
